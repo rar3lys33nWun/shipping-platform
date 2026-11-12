@@ -89,7 +89,13 @@ export default function TrackingPage() {
             </span>
           </div>
 
-          {shipment.status !== 'exception' && (
+          {shipment.status === 'returned' && (
+            <div className="return-notice">
+              <strong>Return in Progress:</strong> This package is being returned to the sender. See transit history below for scan details.
+            </div>
+          )}
+
+          {shipment.status !== 'exception' && shipment.status !== 'returned' && (
             <div className="progress-tracker">
               {STEPS.map((step, index) => {
                 let stateClass = '';

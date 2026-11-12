@@ -258,6 +258,7 @@ export default function AdminDashboard() {
               <option value="out_for_delivery">Out for Delivery</option>
               <option value="delivered">Delivered</option>
               <option value="exception">Exception</option>
+<option value="returned">Returned to Sender</option>
             </select>
           </div>
           <div className="form-group">

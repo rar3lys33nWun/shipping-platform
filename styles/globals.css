@@ -291,6 +291,21 @@ button:disabled {
   color: #991b1b;
 }
 
+.badge.returned {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.return-notice {
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 0.9rem 1.1rem;
+  border-radius: 8px;
+  margin: 1.25rem 0;
+  font-weight: 500;
+}
+
 /* Timeline */
 .timeline {
   border-left: 3px solid var(--primary-navy);
