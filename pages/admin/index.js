@@ -1,19 +1,56 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 
 export default function AdminDashboard() {
+  // Auth State
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Create Shipment State
   const [senderName, setSenderName] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [recipientAddress, setRecipientAddress] = useState('');
   const [weightKg, setWeightKg] = useState('');
   const [initialLocation, setInitialLocation] = useState('');
+  const [initialDateTime, setInitialDateTime] = useState('');
   const [createMsg, setCreateMsg] = useState('');
 
+  // Update Shipment State
   const [updateTrackingNum, setUpdateTrackingNum] = useState('');
   const [newStatus, setNewStatus] = useState('in_transit');
   const [locationCityState, setLocationCityState] = useState('');
   const [description, setDescription] = useState('');
+  const [customDateTime, setCustomDateTime] = useState('');
   const [updateMsg, setUpdateMsg] = useState('');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setAuthError(error.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   const generateTrackingNumber = () => {
     const randomDigits = Math.floor(100000 + Math.random() * 900000);
@@ -25,18 +62,22 @@ export default function AdminDashboard() {
     setCreateMsg('');
     const trackingNumber = generateTrackingNumber();
 
+    const shipmentPayload = {
+      tracking_number: trackingNumber,
+      sender_name: senderName,
+      recipient_name: recipientName,
+      recipient_address: recipientAddress,
+      weight_kg: parseFloat(weightKg),
+      status: 'label_created',
+    };
+
+    if (initialDateTime) {
+      shipmentPayload.created_at = new Date(initialDateTime).toISOString();
+    }
+
     const { data, error } = await supabase
       .from('shipments')
-      .insert([
-        {
-          tracking_number: trackingNumber,
-          sender_name: senderName,
-          recipient_name: recipientName,
-          recipient_address: recipientAddress,
-          weight_kg: parseFloat(weightKg),
-          status: 'label_created',
-        },
-      ])
+      .insert([shipmentPayload])
       .select()
       .single();
 
@@ -45,14 +86,18 @@ export default function AdminDashboard() {
       return;
     }
 
-    await supabase.from('tracking_history').insert([
-      {
-        shipment_id: data.id,
-        location_city_state: initialLocation || 'Origin Facility',
-        status_update: 'label_created',
-        description: 'Shipping label created and shipment registered in system.',
-      },
-    ]);
+    const historyPayload = {
+      shipment_id: data.id,
+      location_city_state: initialLocation || 'Origin Facility',
+      status_update: 'label_created',
+      description: 'Shipping label created and shipment registered in system.',
+    };
+
+    if (initialDateTime) {
+      historyPayload.timestamp = new Date(initialDateTime).toISOString();
+    }
+
+    await supabase.from('tracking_history').insert([historyPayload]);
 
     setCreateMsg(`Success! Created shipment with Tracking Number: ${trackingNumber}`);
     setSenderName('');
@@ -60,6 +105,7 @@ export default function AdminDashboard() {
     setRecipientAddress('');
     setWeightKg('');
     setInitialLocation('');
+    setInitialDateTime('');
   };
 
   const handleUpdateTracking = async (e) => {
@@ -87,16 +133,21 @@ export default function AdminDashboard() {
       return;
     }
 
+    const historyPayload = {
+      shipment_id: shipment.id,
+      location_city_state: locationCityState,
+      status_update: newStatus,
+      description: description,
+    };
+
+    // Apply custom date and time if selected by admin
+    if (customDateTime) {
+      historyPayload.timestamp = new Date(customDateTime).toISOString();
+    }
+
     const { error: historyError } = await supabase
       .from('tracking_history')
-      .insert([
-        {
-          shipment_id: shipment.id,
-          location_city_state: locationCityState,
-          status_update: newStatus,
-          description: description,
-        },
-      ]);
+      .insert([historyPayload]);
 
     if (historyError) {
       setUpdateMsg(`Status updated, but failed to log history: ${historyError.message}`);
@@ -107,10 +158,54 @@ export default function AdminDashboard() {
     setUpdateTrackingNum('');
     setLocationCityState('');
     setDescription('');
+    setCustomDateTime('');
   };
 
+  if (authLoading) {
+    return <div className="card"><p>Checking admin session...</p></div>;
+  }
+
+  // Show Login Form if not authenticated
+  if (!session) {
+    return (
+      <div className="card" style={{ maxWidth: '420px', margin: '2rem auto' }}>
+        <h2>Admin Portal Login</h2>
+        <form onSubmit={handleLogin}>
+          <div className="form-group">
+            <label>Admin Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <button type="submit" style={{ width: '100%' }}>Sign In</button>
+        </form>
+        {authError && <div className="error">{authError}</div>}
+      </div>
+    );
+  }
+
+  // Authenticated Admin Dashboard
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <span>Logged in as <strong>{session.user.email}</strong></span>
+        <button onClick={handleLogout} style={{ backgroundColor: '#475569', padding: '0.5rem 1rem' }}>
+          Sign Out
+        </button>
+      </div>
+
       <div className="card">
         <h2>Create New Shipment</h2>
         <form onSubmit={handleCreateShipment}>
@@ -132,7 +227,15 @@ export default function AdminDashboard() {
           </div>
           <div className="form-group">
             <label>Origin Hub (City, State)</label>
-            <input placeholder="e.g., Lagos, LA" value={initialLocation} onChange={(e) => setInitialLocation(e.target.value)} required />
+            <input placeholder="e.g., Benin City, ED" value={initialLocation} onChange={(e) => setInitialLocation(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>Custom Date & Time (Optional — defaults to now)</label>
+            <input
+              type="datetime-local"
+              value={initialDateTime}
+              onChange={(e) => setInitialDateTime(e.target.value)}
+            />
           </div>
           <button type="submit">Generate Label & Tracking ID</button>
         </form>
@@ -159,11 +262,19 @@ export default function AdminDashboard() {
           </div>
           <div className="form-group">
             <label>Current Location (City, State)</label>
-            <input placeholder="e.g., Warri, DE" value={locationCityState} onChange={(e) => setLocationCityState(e.target.value)} required />
+            <input placeholder="e.g., Lagos, LA" value={locationCityState} onChange={(e) => setLocationCityState(e.target.value)} required />
           </div>
           <div className="form-group">
             <label>Scan Description</label>
-            <input placeholder="e.g., Arrived at regional sorting facility" value={description} onChange={(e) => setDescription(e.target.value)} required />
+            <input placeholder="e.g., Departed sorting facility" value={description} onChange={(e) => setDescription(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>Custom Date & Time (Optional — defaults to now)</label>
+            <input
+              type="datetime-local"
+              value={customDateTime}
+              onChange={(e) => setCustomDateTime(e.target.value)}
+            />
           </div>
           <button type="submit">Update Shipment</button>
         </form>
