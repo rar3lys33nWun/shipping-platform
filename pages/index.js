@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 
+const STEPS = [
+  { key: 'label_created', label: 'Label Created' },
+  { key: 'picked_up', label: 'Picked Up' },
+  { key: 'in_transit', label: 'In Transit' },
+  { key: 'out_for_delivery', label: 'Out for Delivery' },
+  { key: 'delivered', label: 'Delivered' },
+];
+
 export default function TrackingPage() {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [shipment, setShipment] = useState(null);
@@ -25,7 +33,7 @@ export default function TrackingPage() {
         .single();
 
       if (shipmentError || !shipmentData) {
-        setError('Tracking number not found. Please check and try again.');
+        setError('Tracking number not found. Please verify your code and try again.');
         setLoading(false);
         return;
       }
@@ -48,10 +56,15 @@ export default function TrackingPage() {
     }
   };
 
+  const currentStepIndex = shipment
+    ? STEPS.findIndex((s) => s.key === shipment.status)
+    : -1;
+
   return (
     <div>
-      <div className="card">
-        <h1>Track Your Shipment</h1>
+      <div className="hero-banner">
+        <h1>Track Your Parcel in Real Time</h1>
+        <p>Enter your shipment tracking ID below for live transit updates and delivery milestones.</p>
         <form onSubmit={handleTrack} className="search-box">
           <input
             type="text"
@@ -61,7 +74,7 @@ export default function TrackingPage() {
             required
           />
           <button type="submit" disabled={loading}>
-            {loading ? 'Searching...' : 'Track'}
+            {loading ? 'Searching...' : 'Track Package'}
           </button>
         </form>
         {error && <div className="error">{error}</div>}
@@ -69,19 +82,53 @@ export default function TrackingPage() {
 
       {shipment && (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <h2>Tracking #{shipment.tracking_number}</h2>
-            <span className="badge">{shipment.status.replace(/_/g, ' ')}</span>
+            <span className={`badge ${shipment.status}`}>
+              {shipment.status.replace(/_/g, ' ')}
+            </span>
           </div>
 
-          <p><strong>Sender:</strong> {shipment.sender_name}</p>
-          <p><strong>Recipient:</strong> {shipment.recipient_name}</p>
-          <p><strong>Destination:</strong> {shipment.recipient_address}</p>
-          <p><strong>Weight:</strong> {shipment.weight_kg} kg</p>
+          {shipment.status !== 'exception' && (
+            <div className="progress-tracker">
+              {STEPS.map((step, index) => {
+                let stateClass = '';
+                if (index < currentStepIndex || shipment.status === 'delivered') {
+                  stateClass = 'completed';
+                } else if (index === currentStepIndex) {
+                  stateClass = 'active';
+                }
 
-          <hr style={{ margin: '1.5rem 0', borderColor: '#e2e8f0' }} />
+                return (
+                  <div key={step.key} className={`progress-step ${stateClass}`}>
+                    <div className="step-dot">{index + 1}</div>
+                    <div className="step-label">{step.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-          <h3>Shipment History</h3>
+          <div className="info-grid">
+            <div className="info-item">
+              <small>Sender</small>
+              <span>{shipment.sender_name}</span>
+            </div>
+            <div className="info-item">
+              <small>Recipient</small>
+              <span>{shipment.recipient_name}</span>
+            </div>
+            <div className="info-item">
+              <small>Package Weight</small>
+              <span>{shipment.weight_kg} kg</span>
+            </div>
+            <div className="info-item">
+              <small>Destination Address</small>
+              <span>{shipment.recipient_address}</span>
+            </div>
+          </div>
+
+          <h3>Transit History</h3>
           {history.length === 0 ? (
             <p>No tracking updates recorded yet.</p>
           ) : (
